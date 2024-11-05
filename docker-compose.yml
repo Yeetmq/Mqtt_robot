@@ -1,0 +1,27 @@
+version: "3"
+
+services:
+
+  mqtt_broker:
+    hostname: mqtt_broker
+    image: emqx:latest
+    env_file:
+      - Robot.env
+
+
+  com_to_mqtt:
+    hostname: com_to_mqtt
+    image: com_to_mqtt:latest
+    build:
+      context: .
+      dockerfile: .Dockerfile
+    volumes:
+      - ./dev:./dev
+    privileged: true
+    tty: true
+    restart: always
+    env_file:
+      - Robot.env
+    command: [ "python3", "AccessCOM.py" ]
+
+
