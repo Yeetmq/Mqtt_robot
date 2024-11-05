@@ -1,13 +1,19 @@
-import time
 import json
+import os
+
 from loguru import logger
 from threading import Thread
 from datetime import datetime
 from typing import Any
 
-from COMBase import COMBase
-from mqttBase import MQTTBase
+from utils.BaseCOM import COMBase
+from utils.BaseMqtt import MQTTBase
 from Devices import IS, US, RFID, BATTERY, CameraServo, Wheels, Flashlight, UVFlashlight
+
+
+logs_path = os.getenv("LOGS_PATH")
+logs_path += "base_hardware.log".replace('//', '/')
+logger.add(sink=logs_path, format="{level} {time} {message}", level="ERROR")
 
 
 class BaseSerialToMQTTConnector(MQTTBase, COMBase):
@@ -83,11 +89,12 @@ class RobotSerialToMQTTConnector(BaseSerialToMQTTConnector):
         RobotSerialToMQTTConnector.__instance = None
 
     def __init__(self,
-                 serial_path: str = '/dev/ttyUSB0',
-                 baudrate: int = 115200, timeout: int = 1,
-                 broker: str = 'broker.emqx.io', port: int = 1883,
-                 root_topic: str = "/python/mqtt/robot/1/", command_topic: str = 'command',
-                 mqtt_msg_split_sym: str = '~'):
+                 serial_path: str = os.getenv("SERIAL_PATH"),
+                 baudrate: int = int(os.getenv("SERIAL_BAUDRATE")),
+                 timeout: int = int(os.getenv("SERIAL_TIMEOUT")),
+                 broker: str = os.getenv("EMQX_HOST"), port: int = int(os.getenv("MQTT_PORT")),
+                 root_topic: str = os.getenv("COMMAND_TOPIC"), command_topic: str = os.getenv("COMMAND_TOPIC"),
+                 mqtt_msg_split_sym: str = os.getenv("MQTT_COMMAND_SPLIT_SYMBOL")):
 
         BaseSerialToMQTTConnector.__init__(self,
                                            serial_path=serial_path,
@@ -96,11 +103,8 @@ class RobotSerialToMQTTConnector(BaseSerialToMQTTConnector):
                                            root_topic=root_topic, command_topic=command_topic,
                                            mqtt_msg_split_sym=mqtt_msg_split_sym)
 
-        SA, SF, SI, SU = BATTERY(), RFID(), IS(), US()
-        CAMERA_SERVO, WHEELS, FLASHLIGHT, UV_FLASHLIGHT = CameraServo(), Wheels(), Flashlight(), UVFlashlight()
-
-        self.sensors_list = [SA, SF, SI, SU]
-        self.devices_list = [CAMERA_SERVO, WHEELS, FLASHLIGHT, UV_FLASHLIGHT]
+        self.sensors_list = [BATTERY(), RFID(), IS(), US()]
+        self.devices_list = [CameraServo(), Wheels(), Flashlight(), UVFlashlight()]
 
         self.msg_to_mqtt: str or None = None
 
@@ -125,8 +129,8 @@ class RobotSerialToMQTTConnector(BaseSerialToMQTTConnector):
 
     def parse_mqtt_data(self, data: str) -> None:
         """
-        The msg.payload should be in the format: `device_name.value(s)`
-        for wheels: WHEELS~+100;-100
+        :param data: should be in the format`device_name.value(s)`
+                     for wheels: WHEELS~+100;-100
         """
         device_from_mqtt: str or None = None
         value_from_mqtt: str or None = None
@@ -146,10 +150,3 @@ class RobotSerialToMQTTConnector(BaseSerialToMQTTConnector):
             else:
                 logger.warning(f"A message has been received from {self.subscribed_topic}"
                                f" that is not being processed in any way: {data}")
-
-
-if __name__ == "__main__":
-    com1 = RobotSerialToMQTTConnector()
-    com1.start()
-    time.sleep(1000)
-    com1.close()
